@@ -231,10 +231,13 @@ def run_audio_detector():
 
     # Load model
     print("  Loading wake word model...", flush=True)
-    # Find model path (compatible with different openwakeword versions)
-    model_paths = [p for p in openwakeword.get_pretrained_model_paths() if "hey_jarvis" in p]
-    if model_paths:
-        oww = OWWModel(wakeword_model_paths=model_paths)
+    # Build explicit ONNX path (tflite_runtime has issues on some ARM builds)
+    import os as _os
+    _any_path = openwakeword.get_pretrained_model_paths()[0]
+    _model_dir = _os.path.dirname(_any_path)
+    _onnx_path = _os.path.join(_model_dir, "hey_jarvis_v0.1.onnx")
+    if _os.path.exists(_onnx_path):
+        oww = OWWModel(wakeword_models=[_onnx_path], inference_framework="onnx")
     else:
         oww = OWWModel(wakeword_models=[WAKE_WORD])
     print("  Model ready!", flush=True)
@@ -265,15 +268,34 @@ def run_audio_detector():
         "connected": ble_connected,
     })
 
+    # Try to open at 16kHz; if mic doesn't support it, use native rate + resample
+    mic_rate = SAMPLE_RATE
+    try:
+        test = sd.InputStream(samplerate=SAMPLE_RATE, channels=1, blocksize=CHUNK_SIZE, dtype='int16')
+        test.close()
+    except sd.PortAudioError:
+        mic_rate = int(device_info['default_samplerate']) or 48000
+        print(f"  [MIC] 16kHz not supported, using {mic_rate}Hz + resample", flush=True)
+
+    resample = mic_rate != SAMPLE_RATE
+    chunk = int(CHUNK_SIZE * mic_rate / SAMPLE_RATE) if resample else CHUNK_SIZE
+
     with sd.InputStream(
-        samplerate=SAMPLE_RATE,
+        samplerate=mic_rate,
         channels=1,
-        blocksize=CHUNK_SIZE,
+        blocksize=chunk,
         dtype='int16',
     ) as stream:
         while True:
-            audio, _ = stream.read(CHUNK_SIZE)
+            audio, _ = stream.read(chunk)
             audio_flat = audio.flatten().astype(np.int16)
+
+            # Resample to 16kHz if needed (simple decimation)
+            if resample:
+                ratio = mic_rate / SAMPLE_RATE
+                indices = np.round(np.arange(0, len(audio_flat), ratio)).astype(int)
+                indices = indices[indices < len(audio_flat)]
+                audio_flat = audio_flat[indices]
 
             prediction = oww.predict(audio_flat)
 
