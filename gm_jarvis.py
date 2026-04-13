@@ -231,14 +231,20 @@ def run_audio_detector():
 
     # Load model
     print("  Loading wake word model...", flush=True)
-    # Build explicit ONNX path (tflite_runtime has issues on some ARM builds)
-    import os as _os
-    _any_path = openwakeword.get_pretrained_model_paths()[0]
-    _model_dir = _os.path.dirname(_any_path)
-    _onnx_path = _os.path.join(_model_dir, "hey_jarvis_v0.1.onnx")
-    if _os.path.exists(_onnx_path):
-        oww = OWWModel(wakeword_models=[_onnx_path], inference_framework="onnx")
-    else:
+    try:
+        # OWW 0.4+ (Trixie): wakeword_model_paths works
+        model_paths = [p for p in openwakeword.get_pretrained_model_paths() if "hey_jarvis" in p]
+        if model_paths:
+            # Prefer ONNX over tflite for ARM compatibility
+            onnx = [p for p in model_paths if p.endswith(".onnx")]
+            chosen = onnx if onnx else model_paths
+            try:
+                oww = OWWModel(wakeword_models=chosen, inference_framework="onnx")
+            except TypeError:
+                oww = OWWModel(wakeword_model_paths=chosen)
+        else:
+            oww = OWWModel(wakeword_models=[WAKE_WORD])
+    except Exception:
         oww = OWWModel(wakeword_models=[WAKE_WORD])
     print("  Model ready!", flush=True)
 
@@ -268,34 +274,41 @@ def run_audio_detector():
         "connected": ble_connected,
     })
 
-    # Try to open at 16kHz; if mic doesn't support it, use native rate + resample
+    # Find USB mic device explicitly and try 16kHz
+    mic_idx = None
+    for i, d in enumerate(sd.query_devices()):
+        if d['max_input_channels'] > 0 and 'USB' in d['name']:
+            mic_idx = i
+            break
+
     mic_rate = SAMPLE_RATE
+    resample = False
+    open_kwargs = dict(samplerate=SAMPLE_RATE, channels=1, blocksize=CHUNK_SIZE, dtype='int16')
+    if mic_idx is not None:
+        open_kwargs['device'] = mic_idx
     try:
-        test = sd.InputStream(samplerate=SAMPLE_RATE, channels=1, blocksize=CHUNK_SIZE, dtype='int16')
+        test = sd.InputStream(**open_kwargs)
         test.close()
     except sd.PortAudioError:
-        mic_rate = int(device_info['default_samplerate']) or 48000
+        mic_rate = int(device_info.get('default_samplerate', 48000))
+        resample = True
+        open_kwargs['samplerate'] = mic_rate
+        open_kwargs['blocksize'] = int(CHUNK_SIZE * mic_rate / SAMPLE_RATE)
         print(f"  [MIC] 16kHz not supported, using {mic_rate}Hz + resample", flush=True)
 
-    resample = mic_rate != SAMPLE_RATE
-    chunk = int(CHUNK_SIZE * mic_rate / SAMPLE_RATE) if resample else CHUNK_SIZE
+    chunk = open_kwargs['blocksize']
 
-    with sd.InputStream(
-        samplerate=mic_rate,
-        channels=1,
-        blocksize=chunk,
-        dtype='int16',
-    ) as stream:
+    with sd.InputStream(**open_kwargs) as stream:
         while True:
             audio, _ = stream.read(chunk)
             audio_flat = audio.flatten().astype(np.int16)
 
-            # Resample to 16kHz if needed (simple decimation)
+            # Resample to 16kHz if needed (proper linear interpolation)
             if resample:
-                ratio = mic_rate / SAMPLE_RATE
-                indices = np.round(np.arange(0, len(audio_flat), ratio)).astype(int)
-                indices = indices[indices < len(audio_flat)]
-                audio_flat = audio_flat[indices]
+                target_len = int(len(audio_flat) * SAMPLE_RATE / mic_rate)
+                x_old = np.linspace(0, 1, len(audio_flat))
+                x_new = np.linspace(0, 1, target_len)
+                audio_flat = np.interp(x_new, x_old, audio_flat).astype(np.int16)
 
             prediction = oww.predict(audio_flat)
 
