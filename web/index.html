@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GM Voice Control — Gym Monster</title>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+        :root {
+            --bg-primary: #060608;
+            --bg-card: rgba(15, 15, 20, 0.85);
+            --accent: #00ff88;
+            --accent-glow: rgba(0, 255, 136, 0.3);
+            --accent-dim: rgba(0, 255, 136, 0.08);
+            --danger: #ff3366;
+            --text: #e8e8ec;
+            --text-dim: #6b6b7b;
+            --border: rgba(255, 255, 255, 0.06);
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--bg-primary);
+            color: var(--text);
+            min-height: 100vh;
+            overflow: hidden;
+        }
+
+        /* Animated background */
+        .bg-grid {
+            position: fixed;
+            inset: 0;
+            background-image:
+                linear-gradient(rgba(0, 255, 136, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0, 255, 136, 0.03) 1px, transparent 1px);
+            background-size: 60px 60px;
+            animation: gridMove 20s linear infinite;
+            z-index: 0;
+        }
+        @keyframes gridMove {
+            from { transform: translate(0, 0); }
+            to { transform: translate(60px, 60px); }
+        }
+
+        .bg-radial {
+            position: fixed;
+            inset: 0;
+            background: radial-gradient(ellipse at 50% 30%, rgba(0, 255, 136, 0.06) 0%, transparent 60%);
+            z-index: 0;
+        }
+
+        .container {
+            position: relative;
+            z-index: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 2rem;
+            gap: 2rem;
+        }
+
+        /* Header */
+        .header {
+            text-align: center;
+        }
+        .header h1 {
+            font-family: 'Orbitron', sans-serif;
+            font-weight: 900;
+            font-size: 2.2rem;
+            letter-spacing: 4px;
+            background: linear-gradient(135deg, var(--accent), #00cc66);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-shadow: none;
+            filter: drop-shadow(0 0 30px var(--accent-glow));
+        }
+        .header .subtitle {
+            font-size: 0.85rem;
+            color: var(--text-dim);
+            letter-spacing: 6px;
+            text-transform: uppercase;
+            margin-top: 0.3rem;
+        }
+
+        /* Main Orb */
+        .orb-container {
+            position: relative;
+            width: 280px;
+            height: 280px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .orb-ring {
+            position: absolute;
+            border-radius: 50%;
+            border: 2px solid var(--accent);
+            opacity: 0.1;
+            animation: ringPulse 3s ease-in-out infinite;
+        }
+        .orb-ring:nth-child(1) { width: 100%; height: 100%; animation-delay: 0s; }
+        .orb-ring:nth-child(2) { width: 85%; height: 85%; animation-delay: 0.5s; }
+        .orb-ring:nth-child(3) { width: 70%; height: 70%; animation-delay: 1s; }
+
+        @keyframes ringPulse {
+            0%, 100% { opacity: 0.05; transform: scale(1); }
+            50% { opacity: 0.2; transform: scale(1.05); }
+        }
+
+        .orb {
+            width: 180px;
+            height: 180px;
+            border-radius: 50%;
+            background: radial-gradient(circle at 35% 35%,
+                rgba(0, 255, 136, 0.25),
+                rgba(0, 255, 136, 0.08) 50%,
+                rgba(0, 255, 136, 0.02));
+            border: 2px solid rgba(0, 255, 136, 0.15);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            transition: all 0.3s ease;
+            box-shadow: 0 0 60px rgba(0, 255, 136, 0.05),
+                        inset 0 0 60px rgba(0, 255, 136, 0.03);
+        }
+
+        .orb.listening {
+            border-color: rgba(0, 255, 136, 0.4);
+            box-shadow: 0 0 80px rgba(0, 255, 136, 0.15),
+                        inset 0 0 40px rgba(0, 255, 136, 0.08);
+        }
+
+        .orb.triggered {
+            border-color: var(--accent);
+            background: radial-gradient(circle at 35% 35%,
+                rgba(0, 255, 136, 0.5),
+                rgba(0, 255, 136, 0.2) 50%,
+                rgba(0, 255, 136, 0.05));
+            box-shadow: 0 0 120px rgba(0, 255, 136, 0.4),
+                        inset 0 0 60px rgba(0, 255, 136, 0.15);
+            animation: orbFlash 0.6s ease;
+        }
+
+        @keyframes orbFlash {
+            0% { transform: scale(1); }
+            30% { transform: scale(1.15); }
+            100% { transform: scale(1); }
+        }
+
+        .orb-icon {
+            font-size: 3rem;
+            margin-bottom: 0.3rem;
+        }
+
+        .orb-status {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 0.7rem;
+            letter-spacing: 3px;
+            color: var(--text-dim);
+            transition: all 0.3s;
+        }
+        .orb.listening .orb-status { color: var(--accent); }
+        .orb.triggered .orb-status { color: var(--accent); }
+
+        /* Confidence bar */
+        .confidence-section {
+            width: 100%;
+            max-width: 500px;
+        }
+
+        .conf-label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.75rem;
+            color: var(--text-dim);
+            margin-bottom: 0.4rem;
+            font-family: 'Orbitron', sans-serif;
+            letter-spacing: 2px;
+        }
+
+        .conf-bar-outer {
+            width: 100%;
+            height: 8px;
+            background: var(--accent-dim);
+            border-radius: 4px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .conf-bar-inner {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, rgba(0, 255, 136, 0.4), var(--accent));
+            border-radius: 4px;
+            transition: width 0.1s ease;
+            box-shadow: 0 0 15px var(--accent-glow);
+        }
+
+        .conf-threshold {
+            position: absolute;
+            top: -4px;
+            height: 16px;
+            width: 2px;
+            background: var(--danger);
+            left: 50%;
+            border-radius: 1px;
+        }
+
+        /* Stats row */
+        .stats-row {
+            display: flex;
+            gap: 1.5rem;
+            width: 100%;
+            max-width: 500px;
+        }
+
+        .stat-card {
+            flex: 1;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 1.2rem;
+            text-align: center;
+            backdrop-filter: blur(20px);
+        }
+
+        .stat-value {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--accent);
+        }
+        .stat-label {
+            font-size: 0.7rem;
+            color: var(--text-dim);
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            margin-top: 0.3rem;
+        }
+
+        /* Log */
+        .log-section {
+            width: 100%;
+            max-width: 500px;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 1rem 1.2rem;
+            backdrop-filter: blur(20px);
+            max-height: 150px;
+            overflow-y: auto;
+        }
+        .log-section::-webkit-scrollbar { width: 4px; }
+        .log-section::-webkit-scrollbar-track { background: transparent; }
+        .log-section::-webkit-scrollbar-thumb { background: rgba(0,255,136,0.2); border-radius: 2px; }
+
+        .log-title {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 0.65rem;
+            letter-spacing: 3px;
+            color: var(--text-dim);
+            margin-bottom: 0.6rem;
+        }
+
+        .log-entry {
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            padding: 0.4rem 0;
+            border-bottom: 1px solid var(--border);
+            font-size: 0.8rem;
+            animation: logSlideIn 0.3s ease;
+        }
+        .log-entry:last-child { border-bottom: none; }
+
+        @keyframes logSlideIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .log-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--accent);
+            flex-shrink: 0;
+            box-shadow: 0 0 8px var(--accent-glow);
+        }
+
+        .log-time {
+            color: var(--text-dim);
+            font-family: 'Orbitron', sans-serif;
+            font-size: 0.65rem;
+        }
+
+        .log-text {
+            color: var(--text);
+            flex: 1;
+        }
+
+        .log-conf {
+            color: var(--accent);
+            font-family: 'Orbitron', sans-serif;
+            font-size: 0.7rem;
+        }
+
+        /* Connection status */
+        .conn-status {
+            position: fixed;
+            top: 1rem;
+            right: 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.7rem;
+            color: var(--text-dim);
+        }
+        .conn-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--danger);
+            transition: background 0.3s;
+        }
+        .conn-dot.connected { background: var(--accent); box-shadow: 0 0 8px var(--accent-glow); }
+
+        /* Footer */
+        .footer {
+            position: fixed;
+            bottom: 1rem;
+            font-size: 0.65rem;
+            color: var(--text-dim);
+            letter-spacing: 2px;
+            font-family: 'Orbitron', sans-serif;
+        }
+    </style>
+</head>
+<body>
+    <div class="bg-grid"></div>
+    <div class="bg-radial"></div>
+
+    <div class="conn-status">
+        <div class="conn-dot" id="connDot"></div>
+        <span id="connText">CONNECTING...</span>
+        <span style="margin-left: 1rem;">│</span>
+        <div class="conn-dot" id="serialDot"></div>
+        <span id="serialText">ATOMS3U</span>
+    </div>
+
+    <div class="container">
+        <div class="header">
+            <h1>GYM MONSTER</h1>
+            <div class="subtitle">Voice Control System</div>
+        </div>
+
+        <div class="orb-container">
+            <div class="orb-ring"></div>
+            <div class="orb-ring"></div>
+            <div class="orb-ring"></div>
+            <div class="orb" id="orb">
+                <div class="orb-icon">🎙️</div>
+                <div class="orb-status" id="orbStatus">STANDBY</div>
+            </div>
+        </div>
+
+        <div class="confidence-section">
+            <div class="conf-label">
+                <span>CONFIDENCE</span>
+                <span id="confValue">0.000</span>
+            </div>
+            <div class="conf-bar-outer">
+                <div class="conf-bar-inner" id="confBar"></div>
+                <div class="conf-threshold" title="Trigger Threshold"></div>
+            </div>
+        </div>
+
+        <div class="stats-row">
+            <div class="stat-card">
+                <div class="stat-value" id="toggleCount">0</div>
+                <div class="stat-label">Toggles</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="peakConf">0.00</div>
+                <div class="stat-label">Peak Conf</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="uptime">0:00</div>
+                <div class="stat-label">Uptime</div>
+            </div>
+        </div>
+
+        <div class="log-section" id="logSection">
+            <div class="log-title">TRIGGER LOG</div>
+        </div>
+    </div>
+
+    <div class="footer">FECHTECH 2026 — POWERED BY OPENWAKEWORD + ATOMS3U</div>
+
+    <script>
+        const orb = document.getElementById('orb');
+        const orbStatus = document.getElementById('orbStatus');
+        const confBar = document.getElementById('confBar');
+        const confValue = document.getElementById('confValue');
+        const toggleCount = document.getElementById('toggleCount');
+        const peakConf = document.getElementById('peakConf');
+        const uptimeEl = document.getElementById('uptime');
+        const logSection = document.getElementById('logSection');
+        const connDot = document.getElementById('connDot');
+        const connText = document.getElementById('connText');
+        const serialDot = document.getElementById('serialDot');
+        const serialText = document.getElementById('serialText');
+
+        let triggers = 0;
+        let peak = 0;
+        let startTime = Date.now();
+        let ws = null;
+        let triggerTimeout = null;
+
+        function connect() {
+            ws = new WebSocket(`ws://${location.hostname}:8765`);
+
+            ws.onopen = () => {
+                connDot.classList.add('connected');
+                connText.textContent = 'CONNECTED';
+                orbStatus.textContent = 'LISTENING';
+                orb.classList.add('listening');
+            };
+
+            ws.onclose = () => {
+                connDot.classList.remove('connected');
+                connText.textContent = 'RECONNECTING...';
+                orb.classList.remove('listening');
+                orbStatus.textContent = 'OFFLINE';
+                setTimeout(connect, 2000);
+            };
+
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+
+                if (data.type === 'confidence') {
+                    const score = data.score;
+                    confBar.style.width = `${Math.min(score * 100, 100)}%`;
+                    confValue.textContent = score.toFixed(3);
+
+                    if (score > peak) {
+                        peak = score;
+                        peakConf.textContent = peak.toFixed(2);
+                    }
+
+                    // Orb intensity
+                    if (score > 0.3) {
+                        orb.style.borderColor = `rgba(0, 255, 136, ${0.2 + score * 0.6})`;
+                    } else if (!orb.classList.contains('triggered')) {
+                        orb.style.borderColor = 'rgba(0, 255, 136, 0.15)';
+                    }
+                }
+
+                if (data.type === 'serial_status') {
+                    if (data.connected) {
+                        serialDot.classList.add('connected');
+                        serialText.textContent = 'ATOMS3U ✓';
+                    } else {
+                        serialDot.classList.remove('connected');
+                        serialText.textContent = 'ATOMS3U ✗';
+                    }
+                }
+
+                if (data.type === 'trigger') {
+                    triggers++;
+                    toggleCount.textContent = triggers;
+
+                    // Flash orb
+                    orb.classList.add('triggered');
+                    orbStatus.textContent = data.serial_sent ? 'WEIGHT TOGGLE!' : 'TOGGLE (NO SERIAL)';
+                    clearTimeout(triggerTimeout);
+                    triggerTimeout = setTimeout(() => {
+                        orb.classList.remove('triggered');
+                        orbStatus.textContent = 'LISTENING';
+                    }, 1500);
+
+                    // Add log entry
+                    const serialIcon = data.serial_sent ? '⚡' : '⚠️';
+                    const entry = document.createElement('div');
+                    entry.className = 'log-entry';
+                    entry.innerHTML = `
+                        <div class="log-dot"></div>
+                        <span class="log-time">${data.time}</span>
+                        <span class="log-text">${serialIcon} Toggle #${triggers}</span>
+                        <span class="log-conf">${data.confidence.toFixed(2)}</span>
+                    `;
+                    // Insert after title
+                    const title = logSection.querySelector('.log-title');
+                    if (title.nextSibling) {
+                        logSection.insertBefore(entry, title.nextSibling);
+                    } else {
+                        logSection.appendChild(entry);
+                    }
+
+                    // Keep max 20 entries
+                    const entries = logSection.querySelectorAll('.log-entry');
+                    if (entries.length > 20) entries[entries.length - 1].remove();
+                }
+            };
+        }
+
+        // Uptime counter
+        setInterval(() => {
+            const elapsed = Math.floor((Date.now() - startTime) / 1000);
+            const min = Math.floor(elapsed / 60);
+            const sec = elapsed % 60;
+            uptimeEl.textContent = `${min}:${sec.toString().padStart(2, '0')}`;
+        }, 1000);
+
+        connect();
+    </script>
+</body>
+</html>

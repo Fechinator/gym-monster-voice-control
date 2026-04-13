@@ -1,0 +1,18 @@
+[Unit]
+Description=GM Voice Control - Gym Monster
+After=network-online.target bluetooth.target
+Wants=network-online.target bluetooth.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=%i
+WorkingDirectory=/home/%i/gm-voice-control
+ExecStartPre=/bin/sleep 10
+ExecStart=/home/%i/gm-voice/bin/python gm_jarvis.py
+Restart=always
+RestartSec=10
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target

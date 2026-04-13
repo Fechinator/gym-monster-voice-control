@@ -1,0 +1,50 @@
+# Dependencies
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environments
+venv/
+.venv/
+gm-voice/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Android (legacy, not part of this project)
+.gradle/
+.kotlin/
+app/
+gradle/
+gradlew
+gradlew.bat
+build.gradle.kts
+settings.gradle.kts
+local.properties
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Models (downloaded at runtime)
+*.onnx
+vosk-model-*/
+
+# Test/development files
+serial_test/
+pi_setup.py
+power_detector.py
+whistle_detector.py
+wakeword_detector.py
+test-signals.html
+
+# Credentials
+*.env
