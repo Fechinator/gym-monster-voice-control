@@ -180,15 +180,6 @@ The ESP32-S3 enters download mode after flashing. **Unplug and replug** the devi
 - Speak clearly and directly into the microphone
 - Check logs: `sudo journalctl -u gm-voice -f`
 
-## Contributing
-
-PRs welcome! Some ideas:
-- [ ] Support for other gym equipment (Tonal, Tempo, etc.)
-- [ ] Custom wake word training
-- [ ] Mobile app for configuration
-- [ ] ESP32 on-device wake word (ESP-SR) for single-device solution
-- [ ] Volume/resistance control via voice ("increase by 5")
-
 ## License
 
 MIT License — see [LICENSE](LICENSE)
