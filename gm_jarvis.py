@@ -274,7 +274,7 @@ def run_audio_detector():
         "connected": ble_connected,
     })
 
-    # Find USB mic device explicitly and try 16kHz
+    # Find USB mic device and record at 48kHz (clean 3x decimation to 16kHz)
     mic_idx = None
     for i, d in enumerate(sd.query_devices()):
         if d['max_input_channels'] > 0 and 'USB' in d['name']:
@@ -290,11 +290,12 @@ def run_audio_detector():
         test = sd.InputStream(**open_kwargs)
         test.close()
     except sd.PortAudioError:
-        mic_rate = int(device_info.get('default_samplerate', 48000))
+        # Use 48kHz for clean 3x integer decimation to 16kHz (no interpolation needed)
+        mic_rate = 48000
         resample = True
         open_kwargs['samplerate'] = mic_rate
-        open_kwargs['blocksize'] = int(CHUNK_SIZE * mic_rate / SAMPLE_RATE)
-        print(f"  [MIC] 16kHz not supported, using {mic_rate}Hz + resample", flush=True)
+        open_kwargs['blocksize'] = CHUNK_SIZE * 3  # 1280 * 3 = 3840
+        print(f"  [MIC] Using {mic_rate}Hz → 16kHz (clean 3x decimation)", flush=True)
 
     chunk = open_kwargs['blocksize']
 
@@ -303,12 +304,9 @@ def run_audio_detector():
             audio, _ = stream.read(chunk)
             audio_flat = audio.flatten().astype(np.int16)
 
-            # Resample to 16kHz if needed (proper linear interpolation)
+            # Clean 3x decimation: take every 3rd sample (48k→16k)
             if resample:
-                target_len = int(len(audio_flat) * SAMPLE_RATE / mic_rate)
-                x_old = np.linspace(0, 1, len(audio_flat))
-                x_new = np.linspace(0, 1, target_len)
-                audio_flat = np.interp(x_new, x_old, audio_flat).astype(np.int16)
+                audio_flat = audio_flat[::3]
 
             prediction = oww.predict(audio_flat)
 
