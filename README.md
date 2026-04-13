@@ -4,10 +4,6 @@
 
 Voice-activated weight toggle for the [Speediance Gym Monster 2S](https://speediance.com/) using a Raspberry Pi and an ESP32-S3 (M5Stack AtomS3U). Say the wake word and your equipment responds — completely hands-free during your workout.
 
-<p align="center">
-  <img src="docs/architecture.png" alt="Architecture" width="700">
-</p>
-
 ## How It Works
 
 ```
